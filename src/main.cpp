@@ -3,12 +3,39 @@
 #include <SPI.h>
 
 const int buttonPin = 25;
+const int pageButtonPin = 32;
 const int buzzerPin = 27;
 int buttonState = 0;
+int pageButtonState = 0;
+int lastPageButtonState = 0;
 int lastButtonState = 0;
 const unsigned long holdtime = 1000; // 1 sec
 
 TFT_eSPI tft = TFT_eSPI();
+
+enum PageState {
+    PAGE_POMODORO,
+	PAGE_WEATHER,
+    PAGE_BREATHING
+};
+
+const int PAGE_COUNT = 3;
+
+PageState currentPage = PAGE_POMODORO;
+
+void nextPage()
+{
+    currentPage = (PageState)((currentPage + 1) % PAGE_COUNT);
+    tft.fillScreen(TFT_BLACK);  // clear once on page change
+}
+
+bool pageButtonPressed()
+{
+    return (pageButtonState == HIGH && lastPageButtonState == LOW);
+}
+
+bool weatherDrawn = false;
+bool breathingDrawn = false;
 
 String formatTime(unsigned int mm, unsigned int ss)
 {
@@ -44,9 +71,9 @@ unsigned long buzz_start = 0;
 unsigned long buzz_end = 500; // 0.5s
 
 // Timer
-const unsigned long timer_increment = 1; // In minutes
+const unsigned long timer_increment = 10; // In minutes
 unsigned long max_timer = 180;
-const unsigned long break_increment = 1; // In minutes
+const unsigned long break_increment = 5; // In minutes
 bool doneInitialized = false;
 
 // Pomodoro variables
@@ -246,7 +273,7 @@ void handleRunningTimer() {
 		pressStartTime = millis();
 	}
 
-	// Check if button held > go back to setting timer
+	// Check if button held > reset and go back to setting timer
 	if (buttonState == LOW && lastButtonState == HIGH)
 	{
 		unsigned long pressDuration = millis() - pressStartTime;
@@ -315,7 +342,7 @@ void handleRunningBreak() {
 		pressStartTime = millis();
 	}
 
-	// Check if button held > go back to setting timer
+	// Check if button held > reset and go back to setting timer
 	if (buttonState == LOW && lastButtonState == HIGH)
 	{
 		unsigned long pressDuration = millis() - pressStartTime;
@@ -373,12 +400,69 @@ void handleDone() {
 	}
 }
 
+void handlePomodoroPage()
+{
+    switch (pomo_state)
+    {
+        case SET_TIMER:
+            handleSetTimer();
+            break;
+
+        case SET_BREAK:
+            handleSetBreak();
+            break;
+
+        case RUNNING:
+            handleRunningTimer();
+            break;
+
+        case BREAK:
+            handleRunningBreak();
+            break;
+
+        case DONE:
+            handleDone();
+            break;
+    }
+}
+
+// -------- Weather Page -------- //
+void handleWeatherPage()
+{
+    if (!weatherDrawn)
+    {
+        tft.setTextColor(TFT_CYAN, TFT_BLACK);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString("Weather", 65, 60, 2);
+        tft.drawString("22°C  Sunny", 65, 90, 1);
+        weatherDrawn = true;
+    }
+}
+
+
+// -------- Breathing Page -------- //
+void handleBreathingPage()
+{
+    if (!breathingDrawn)
+    {
+        tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString("Breathe", 65, 60, 2);
+        tft.drawString("Inhale... Exhale...", 65, 90, 1);
+        breathingDrawn = true;
+    }
+}
+
+
 void setup() {
 	Serial.begin(115200);
 	delay(100);
 
 	// Initialize the pushbutton pin as an input:
 	pinMode(buttonPin, INPUT);
+
+	// Initialize button
+	pinMode(pageButtonPin, INPUT);
 
 	// Init buzzer
 	pinMode(buzzerPin, OUTPUT);
@@ -400,32 +484,40 @@ void setup() {
 
 void loop() {
   	buttonState = digitalRead(buttonPin);
+	pageButtonState = digitalRead(pageButtonPin);
 
-	switch (pomo_state)
-	{
-	case SET_TIMER:
-		handleSetTimer();
-		break;
-	
-	case SET_BREAK:
-		handleSetBreak();
-		break;
-	
-	case RUNNING:
-		handleRunningTimer();
-		break;
+	if (pageButtonPressed())
+    {
+        nextPage();
+        tft.fillScreen(TFT_BLACK);
 
-	case BREAK:
-		handleRunningBreak();
-		break;
+        // reset UI flags
+        titleTimerSet = false;
+        titleBreakSet = false;
+        titleRunningSet = false;
+        titleRunningBreakSet = false;
 
-	case DONE:
-	handleDone();
-	break;
+		weatherDrawn = false;
+		breathingDrawn = false;
 
-	default:
-		break;
+		lastDrawnTimer = -1;
 	}
+
+    switch (currentPage)
+    {
+        case PAGE_POMODORO:
+            handlePomodoroPage();
+            break;
+
+        case PAGE_WEATHER:
+            handleWeatherPage();
+            break;
+
+        case PAGE_BREATHING:
+            handleBreathingPage();
+            break;
+    }
 	
 	lastButtonState = buttonState;
+	lastPageButtonState = pageButtonState;
 }
