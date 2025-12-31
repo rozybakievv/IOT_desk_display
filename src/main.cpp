@@ -24,28 +24,37 @@ String formatTime(unsigned int mm, unsigned int ss)
     return result;
 }
 
+void clearMiddleScreen() {
+	tft.fillRect(0, 20, 160, 100, TFT_BLACK); // Clear area to not leave pixels
+}
+
 // -------- Pomodoro -------- //
 enum PomodoroState {
     SET_TIMER,
 	SET_BREAK,
     RUNNING,
+	BREAK,
     DONE
 };
 
-const unsigned long timer_increment = 1; // In minutes
-const unsigned long break_increment = 5; // In minutes
+// Buzzer
 unsigned long buzz_amount = 0;
 const unsigned long buzz_max = 3;
 unsigned long buzz_start = 0;
-unsigned long buzz_end = 1000; // 1s
-bool doneInitialized = false;
-bool break_time = false;
+unsigned long buzz_end = 500; // 0.5s
 
+// Timer
+const unsigned long timer_increment = 1; // In minutes
+unsigned long max_timer = 180;
+const unsigned long break_increment = 1; // In minutes
+bool doneInitialized = false;
+
+// Pomodoro variables
 PomodoroState pomo_state = SET_TIMER;
 unsigned long pomodoro_timer[2] = {0, 0};
 unsigned long start_time = 0;
 String time_spent_s;
-unsigned long max_timer = 180;
+
 unsigned long lastDisplayUpdate = 0;
 const unsigned long DISPLAY_INTERVAL = 1000; // 1 second
 unsigned long pressStartTime = 0;
@@ -53,13 +62,30 @@ unsigned long pressStartTime = 0;
 long lastDrawnTimer = -1;
 long lastDrawnBreak = -1;
 
-void handleTimer() {
+bool titleTimerSet = false;
+bool titleBreakSet = false;
+bool titleRunningSet = false;
+bool titleRunningBreakSet = false;
+
+// Functions
+void handleSetTimer() {
+	// Draw title
+	if (!titleTimerSet)
+	{
+		tft.setTextColor(TFT_PURPLE, TFT_BLACK);
+		tft.setTextDatum(MC_DATUM);
+		tft.drawString("Set Timer", 65, 100, 1);
+
+		titleTimerSet = true;
+	}
+
+	// Start hold timer
 	if (buttonState == HIGH && lastButtonState == LOW)
 	{
-		// Start hold timer
 		pressStartTime = millis();
 	}
 
+	// Check if selected (held) or if increment (pressed)
 	if (buttonState == LOW && lastButtonState == HIGH)
 	{
 		unsigned long pressDuration = millis() - pressStartTime;
@@ -78,17 +104,20 @@ void handleTimer() {
 			Serial.println(pomodoro_timer[0]);
 		} else if (pressDuration >= holdtime) {
 			Serial.println("Continue to Set Timer");
+			clearMiddleScreen();
 			start_time = millis();
 			lastDrawnBreak = -1;
+			titleTimerSet = false;
 			pomo_state = SET_BREAK;
 		}
 	}
 
-	// TODO: Draw title -> set main timer
-
+	// Redraw time and title each increment
 	if (pomodoro_timer[0] != lastDrawnTimer)
 	{
 		lastDrawnTimer = pomodoro_timer[0];
+
+		titleTimerSet = false; // Redraw title
 
 		unsigned long remainingSeconds = pomodoro_timer[0] * 60;
 		unsigned int mm = remainingSeconds / 60;
@@ -96,20 +125,31 @@ void handleTimer() {
 
 		String timeStr = formatTime(mm, ss);
 
-		tft.fillRect(0, 40, 160, 40, TFT_BLACK); // Clear area to not leave pixels
+		clearMiddleScreen();
 		tft.setTextColor(TFT_BLUE, TFT_BLACK);
 		tft.setTextDatum(MC_DATUM); // Middle Center
 		tft.drawString(timeStr, 65, 75, 1); // Found center
 	}
 }
 
-void handleBreak() {
+void handleSetBreak() {
+	// Draw title
+	if (!titleBreakSet)
+	{
+		tft.setTextColor(TFT_PURPLE, TFT_BLACK);
+		tft.setTextDatum(MC_DATUM);
+		tft.drawString("Set Break Timer", 65, 100, 1);
+
+		titleBreakSet = true;
+	}
+
+	// Start button hold timer
 	if (buttonState == HIGH && lastButtonState == LOW)
 	{
-		// Start hold timer
 		pressStartTime = millis();
 	}
 
+	// Check if selected (held) or if increment (press)
 	if (buttonState == LOW && lastButtonState == HIGH)
 	{
 		unsigned long pressDuration = millis() - pressStartTime;
@@ -128,68 +168,170 @@ void handleBreak() {
 			Serial.println(pomodoro_timer[1]);
 		} else if (pressDuration >= holdtime) {
 			Serial.println("Timer started");
+			clearMiddleScreen();
 			start_time = millis();
+			titleBreakSet = false;
 			pomo_state = RUNNING;
 		}
 	}
 
-	// TODO: Draw title -> set break timer
-
+	// Redraw each increment
 	if (pomodoro_timer[1] != lastDrawnBreak)
 	{
 		lastDrawnBreak = pomodoro_timer[1];
-		
+
+		titleBreakSet = false; // Redraw title
+
 		unsigned long remainingSeconds = pomodoro_timer[1] * 60;
 		unsigned int mm = remainingSeconds / 60;
 		unsigned int ss = remainingSeconds % 60;
 
 		String timeStr = formatTime(mm, ss);
 
-		tft.fillRect(0, 40, 160, 40, TFT_BLACK); // Clear area to not leave pixels
+		clearMiddleScreen();
 		tft.setTextColor(TFT_BLUE, TFT_BLACK);
-		tft.setTextDatum(MC_DATUM); // Middle Center
-		tft.drawString(timeStr, 65, 75, 1); // Found center
+		tft.setTextDatum(MC_DATUM);
+		tft.drawString(timeStr, 65, 75, 1);
 	}
 }
 
-void handleRunning() {
+void handleRunningTimer() {
 	unsigned long now = millis();
 	unsigned long elapsed = (now - start_time)/1000; // In seconds
+
+	// Draw title
+	if (!titleRunningSet)
+	{
+		tft.setTextColor(TFT_PURPLE, TFT_BLACK);
+		tft.setTextDatum(MC_DATUM);
+		tft.drawString("Focus", 65, 100, 1);
+
+		titleRunningSet = true;
+	}
 
 	if (elapsed >= pomodoro_timer[0] * 60) // Target time reached
 	{
 		pomodoro_timer[0] = 0;
-		pomodoro_timer[1] = 0;
-		start_time = 0;
-		pomo_state = DONE;
+		start_time = now;
+		lastDisplayUpdate = -1;
+		titleRunningSet = false;
+		titleRunningBreakSet = false;
+		pomo_state = BREAK;
 
-		tft.fillRect(0, 40, 160, 40, TFT_BLACK); // Clear area to not leave pixels
-		tft.setTextColor(TFT_BLUE, TFT_BLACK);
-		tft.setTextDatum(MC_DATUM); // Middle Center
-		tft.drawString("0", 65, 75, 1); // Found center
-	} 
-	
+		clearMiddleScreen();
+	}
 
 	// Display remaining timer time
-	if (!break_time)
+	if (now - lastDisplayUpdate >= DISPLAY_INTERVAL) 
 	{
-		if (now - lastDisplayUpdate >= DISPLAY_INTERVAL) 
-		{
-			lastDisplayUpdate = now;
+		lastDisplayUpdate = now;
 
-			unsigned long remainingSeconds = pomodoro_timer[0] * 60 - elapsed;
-			unsigned int mm = remainingSeconds / 60;
-			unsigned int ss = remainingSeconds % 60;
+		titleRunningSet = false; // Redraw title
 
-			String timeStr = formatTime(mm, ss);
+		unsigned long remainingSeconds = pomodoro_timer[0] * 60 - elapsed;
+		unsigned int mm = remainingSeconds / 60;
+		unsigned int ss = remainingSeconds % 60;
 
-			tft.fillRect(0, 40, 160, 40, TFT_BLACK); // Clear area to not leave pixels
-			tft.setTextColor(TFT_BLUE, TFT_BLACK);
-			tft.setTextDatum(MC_DATUM); // Middle Center
-			tft.drawString(timeStr, 65, 75, 1); // Found center
+		String timeStr = formatTime(mm, ss);
+
+		clearMiddleScreen();
+		tft.setTextColor(TFT_BLUE, TFT_BLACK);
+		tft.setTextDatum(MC_DATUM); // Middle Center
+		tft.drawString(timeStr, 65, 75, 1); // Found center
+	}
+
+	// Start hold timer
+	if (buttonState == HIGH && lastButtonState == LOW)
+	{
+		pressStartTime = millis();
+	}
+
+	// Check if button held > go back to setting timer
+	if (buttonState == LOW && lastButtonState == HIGH)
+	{
+		unsigned long pressDuration = millis() - pressStartTime;
+		
+		if (pressDuration >= holdtime) {
+			Serial.println("Going back to set timer");
+			clearMiddleScreen();
+			doneInitialized = false;
+			lastDrawnTimer = -1;
+			lastDrawnBreak = -1;
+			titleTimerSet = false;
+			titleBreakSet = false;
+			pomodoro_timer[0] = 0;
+			pomodoro_timer[1] = 0;
+			pomo_state = SET_TIMER;
 		}
-	} else {
-		// Display remaning break time
+	}
+}
+
+void handleRunningBreak() {
+	unsigned long now = millis();
+	unsigned long elapsed = (now - start_time)/1000; // In seconds
+
+	// Draw title
+	if (!titleRunningBreakSet)
+	{
+		tft.setTextColor(TFT_PURPLE, TFT_BLACK);
+		tft.setTextDatum(MC_DATUM);
+		tft.drawString("Break Time !", 65, 100, 1);
+
+		titleRunningBreakSet = true;
+	}
+
+	if (elapsed >= pomodoro_timer[1] * 60) // Target time reached
+	{
+		Serial.println("Break completed");
+		pomodoro_timer[1] = 0;
+		start_time = 0;
+		lastDisplayUpdate = -1;
+		pomo_state = DONE;
+
+		clearMiddleScreen();
+	}
+
+	if (now - lastDisplayUpdate >= DISPLAY_INTERVAL) 
+	{
+		lastDisplayUpdate = now;
+
+		unsigned long remainingSeconds = pomodoro_timer[1] * 60 - elapsed;
+		unsigned int mm = remainingSeconds / 60;
+		unsigned int ss = remainingSeconds % 60;
+
+		String timeStr = formatTime(mm, ss);
+
+		clearMiddleScreen();
+		tft.setTextColor(TFT_BLUE, TFT_BLACK);
+		tft.setTextDatum(MC_DATUM); // Middle Center
+		tft.drawString(timeStr, 65, 75, 1); // Found center
+
+		titleRunningBreakSet = false; // Redraw title
+	}
+
+	// Start hold timer
+	if (buttonState == HIGH && lastButtonState == LOW)
+	{
+		pressStartTime = millis();
+	}
+
+	// Check if button held > go back to setting timer
+	if (buttonState == LOW && lastButtonState == HIGH)
+	{
+		unsigned long pressDuration = millis() - pressStartTime;
+		
+		if (pressDuration >= holdtime) {
+			Serial.println("Going back to set timer");
+			clearMiddleScreen();
+			doneInitialized = false;
+			lastDrawnTimer = -1;
+			lastDrawnBreak = -1;
+			titleTimerSet = false;
+			titleBreakSet = false;
+			pomodoro_timer[0] = 0;
+			pomodoro_timer[1] = 0;
+			pomo_state = SET_TIMER;
+		}
 	}
 }
 
@@ -222,6 +364,7 @@ void handleDone() {
 	if (buzz_amount >= buzz_max)
 	{
 		Serial.println("BUZZ BUZZ BUZZ - Timer completed");
+		clearMiddleScreen();
 		digitalWrite(buzzerPin, LOW);
 		buzz_amount = 0;
 		doneInitialized = false;
@@ -261,20 +404,24 @@ void loop() {
 	switch (pomo_state)
 	{
 	case SET_TIMER:
-		handleTimer();
+		handleSetTimer();
 		break;
 	
 	case SET_BREAK:
-		handleBreak();
+		handleSetBreak();
 		break;
 	
 	case RUNNING:
-		handleRunning();
+		handleRunningTimer();
+		break;
+
+	case BREAK:
+		handleRunningBreak();
 		break;
 
 	case DONE:
-		handleDone();
-		break;
+	handleDone();
+	break;
 
 	default:
 		break;
