@@ -2,7 +2,8 @@
 
 A ESP32-based desk companion that helps with productivity offering features such as a Pomodoro timer, real-time clock, and live weather data using Wi-Fi connectivity.
 
-Tech Stack: embedded C/C++, KiCad, Arduino Framework, HTTP & REST API, 
+Tech Stack: embedded C/C++, KiCad, Arduino Framework, HTTP & REST API.
+Circuit design in KiCad with custom symbol for the TFT Display.
 
 #### Features
 - Pomodoro timer with visual feedback on TFT screen
