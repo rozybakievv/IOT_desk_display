@@ -1,3 +1,5 @@
+# IoT Desk Companion (ESP32)
+
 A ESP32-based desk companion that helps with productivity offering features such as a Pomodoro timer, real-time clock, and live weather data using Wi-Fi connectivity.
 
 Tech Stack: embedded C/C++, KiCad, Arduino Framework, HTTP & REST API, 
