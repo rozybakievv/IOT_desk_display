@@ -1,6 +1,9 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <SPI.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 const int buttonPin = 25;
 const int pageButtonPin = 32;
@@ -427,18 +430,92 @@ void handlePomodoroPage()
 }
 
 // -------- Weather Page -------- //
+unsigned long weather_start_time = 0;
+const unsigned long api_call_time = 30; // In minutes, update temp each 30mins
+
+unsigned long temp = 0;
+unsigned long feelslike = 0;
+String condition;
+
+void initWiFi() {
+	WiFi.mode(WIFI_STA); // Set to station mode to connect to other AP's
+	WiFi.begin(WIFISSID, WIFIPASS);
+	Serial.print("Connecting to WiFi ..");
+	while (WiFi.status() != WL_CONNECTED) {
+	  Serial.print('.');
+	  delay(1000);
+	}
+	Serial.println("Connected to WiFi:\r\n");
+	Serial.println(WiFi.localIP());
+}
+
+void weatherApiCall() {
+	weather_start_time = millis();
+	
+	if (WiFi.status() == WL_CONNECTED)
+	{
+		String apilink = "http://api.weatherapi.com/v1/current.json?key=";
+        apilink += APIKEY;
+        apilink += "&q=Montreal&aqi=no";
+
+		HTTPClient http;
+
+		http.begin(apilink.c_str());
+
+		// Send HTTP GET request
+      	int httpResponseCode = http.GET();
+
+		if (httpResponseCode>200) {
+			// Print response
+			Serial.print("HTTP Response code: ");
+			Serial.println(httpResponseCode);
+
+			// Handle payload
+			String payload = http.getString();
+
+			// Create filter
+            JsonDocument filter;
+            filter["current"]["temp_c"] = true;
+            filter["current"]["feelslike_c"] = true;
+            filter["current"]["condition"]["text"] = true;
+
+            // Parse JSON with filter
+            JsonDocument doc;
+            deserializeJson(doc, payload, DeserializationOption::Filter(filter));
+
+			// Update vars
+            temp = doc["current"]["temp_c"];
+            feelslike = doc["current"]["feelslike_c"]; 
+            condition = doc["current"]["condition"]["text"].as<String>();
+		}
+		else {
+		Serial.print("Error code: ");
+		Serial.println(httpResponseCode);
+		}
+		http.end();
+	}
+	else
+	{
+		Serial.println("WiFi Disconnected");
+	}
+}
+
 void handleWeatherPage()
 {
+	if ((weather_start_time)/1000 >= api_call_time * 60) // Compare in seconds
+	{
+		
+	}
+	
     if (!weatherDrawn)
     {
         tft.setTextColor(TFT_CYAN, TFT_BLACK);
         tft.setTextDatum(MC_DATUM);
-        tft.drawString("Weather", 65, 60, 2);
-        tft.drawString("22°C  Sunny", 65, 90, 1);
+        tft.drawString(condition, 65, 60, 2);
+        tft.drawString(temp+"°C ", 65, 90, 1);
         weatherDrawn = true;
     }
 }
-
 
 // -------- Breathing Page -------- //
 void handleBreathingPage()
@@ -457,6 +534,8 @@ void handleBreathingPage()
 void setup() {
 	Serial.begin(115200);
 	delay(100);
+
+	initWiFi();
 
 	// Initialize the pushbutton pin as an input:
 	pinMode(buttonPin, INPUT);
