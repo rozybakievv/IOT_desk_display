@@ -17,6 +17,7 @@ Circuit design in KiCad with custom symbol for the TFT Display.
 - 2 push buttons (with external pull down resistors)
 - Buzzer
 
+(Schematic serves as a reference guide for wiring connections.)
 <img width="1424" height="1002" alt="image" src="https://github.com/user-attachments/assets/b5b54b76-4fb9-4df4-a01a-f2956734b4a4" />
 
 ## Connections
