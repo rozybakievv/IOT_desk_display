@@ -1,8 +1,8 @@
 # IoT Desk Companion (ESP32)
 
-A ESP32-based desk companion that helps with productivity offering features such as a Pomodoro timer, real-time clock, and live weather data using Wi-Fi connectivity.
+A ESP32-based desk companion that helps with productivity. Features: Pomodoro timer, real-time clock, and live weather data using Wi-Fi connectivity.
 
-Tech Stack: embedded C/C++, KiCad, Arduino Framework, HTTP & REST API.
+Tech Stack: Embedded C/C++, KiCad, Arduino Framework, HTTP & REST API.
 Circuit design in KiCad with custom symbol for the TFT Display.
 
 #### Features
@@ -17,7 +17,7 @@ Circuit design in KiCad with custom symbol for the TFT Display.
 - 2 push buttons (with external pull down resistors)
 - Buzzer
 
-<img width="659" height="650" alt="image" src="https://github.com/user-attachments/assets/064cdaab-0dab-4a05-b721-7aaced7d6a9f" />
+<img width="1424" height="1002" alt="image" src="https://github.com/user-attachments/assets/b5b54b76-4fb9-4df4-a01a-f2956734b4a4" />
 
 ## Connections
 ###### TFT Display :
