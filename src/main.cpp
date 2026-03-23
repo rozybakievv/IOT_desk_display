@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <credentials.h>
 
 const int buttonPin = 25;
 const int pageButtonPin = 32;
@@ -431,22 +432,28 @@ void handlePomodoroPage()
 
 // -------- Weather Page -------- //
 unsigned long weather_start_time = 0;
-const unsigned long api_call_time = 30; // In minutes, update temp each 30mins
+const unsigned long api_call_time = 30; // Update temp timer (minutes)
 
-unsigned long temp = 0;
-unsigned long feelslike = 0;
+long temp = 0;
+long feelslike = 0;
 String condition;
 
 void initWiFi() {
-	WiFi.mode(WIFI_STA); // Set to station mode to connect to other AP's
-	WiFi.begin(WIFISSID, WIFIPASS);
-	Serial.print("Connecting to WiFi ..");
-	while (WiFi.status() != WL_CONNECTED) {
-	  Serial.print('.');
-	  delay(1000);
-	}
-	Serial.println("Connected to WiFi:\r\n");
-	Serial.println(WiFi.localIP());
+	WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFISSID, WIFIPASS);
+    Serial.print("Connecting to WiFi...");
+    
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+        Serial.print('.');
+        delay(500);
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nConnected: " + WiFi.localIP().toString());
+    } else {
+        Serial.println("\nWiFi failed, continuing offline.");
+    }
 }
 
 void weatherApiCall() {
@@ -465,8 +472,7 @@ void weatherApiCall() {
 		// Send HTTP GET request
       	int httpResponseCode = http.GET();
 
-		if (httpResponseCode>200) {
-			// Print response
+		if (httpResponseCode==200) {
 			Serial.print("HTTP Response code: ");
 			Serial.println(httpResponseCode);
 
@@ -484,8 +490,8 @@ void weatherApiCall() {
             deserializeJson(doc, payload, DeserializationOption::Filter(filter));
 
 			// Update vars
-            temp = doc["current"]["temp_c"];
-            feelslike = doc["current"]["feelslike_c"]; 
+            temp = lround(doc["current"]["temp_c"].as<float>()); // Convert float to long (rounded)
+			feelslike = lround(doc["current"]["feelslike_c"].as<float>()); // Convert float to long (rounded)
             condition = doc["current"]["condition"]["text"].as<String>();
 		}
 		else {
@@ -502,9 +508,10 @@ void weatherApiCall() {
 
 void handleWeatherPage()
 {
-	if ((weather_start_time)/1000 >= api_call_time * 60) // Compare in seconds
+	if (weather_start_time == 0 || (millis() - weather_start_time >= (unsigned long)api_call_time * 60 * 1000)) // Compare in seconds
 	{
-		
+		weatherApiCall();
+		weatherDrawn = false; // Redraw with new data
 	}
 	
     if (!weatherDrawn)
@@ -512,7 +519,8 @@ void handleWeatherPage()
         tft.setTextColor(TFT_CYAN, TFT_BLACK);
         tft.setTextDatum(MC_DATUM);
         tft.drawString(condition, 65, 60, 2);
-        tft.drawString(temp+"°C ", 65, 90, 1);
+        tft.drawString(String(temp)+" C ", 65, 90, 1);
+		tft.drawString("Feels like: "+String(feelslike)+" C ", 65, 120, 1);
         weatherDrawn = true;
     }
 }
@@ -530,12 +538,25 @@ void handleBreathingPage()
     }
 }
 
-
 void setup() {
 	Serial.begin(115200);
 	delay(100);
 
+	// Init display
+	tft.init();
+	tft.setRotation(0);
+	tft.fillScreen(TFT_BLACK);
+	tft.setTextColor(TFT_WHITE, TFT_BLACK);
+	tft.setTextSize(1);
+	tft.setCursor(0, 0);
+	tft.println("Pomodoro timer");
+	tft.setTextColor(TFT_BLUE, TFT_BLACK);
+	tft.setTextDatum(MC_DATUM); // Middle Center
+	tft.drawString("0.00", 65, 75, 1); // Found center
+
+	// Init WiFi + weather vars
 	initWiFi();
+	weatherApiCall();
 
 	// Initialize the pushbutton pin as an input:
 	pinMode(buttonPin, INPUT);
@@ -546,19 +567,6 @@ void setup() {
 	// Init buzzer
 	pinMode(buzzerPin, OUTPUT);
 	digitalWrite(buzzerPin, LOW); // off
-
-	tft.init();
-	tft.setRotation(0);   // 0–3 if orientation is wrong
-	tft.fillScreen(TFT_BLACK);
-
-	tft.setTextColor(TFT_WHITE, TFT_BLACK);
-	tft.setTextSize(1);
-	tft.setCursor(0, 0);
-	tft.println("Pomodoro timer");
-
-	tft.setTextColor(TFT_BLUE, TFT_BLACK);
-	tft.setTextDatum(MC_DATUM); // Middle Center
-	tft.drawString("0.00", 65, 75, 1); // Found center
 }
 
 void loop() {
